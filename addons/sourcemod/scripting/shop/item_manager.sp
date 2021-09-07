@@ -34,7 +34,7 @@ void ItemManager_CreateNatives()
 	h_arCategories = new ArrayList(ByteCountToCells(SHOP_MAX_STRING_LENGTH));
 	h_trieCategories = new StringMap();
 	h_KvItems = new KeyValues("Items");
-	
+
 	CreateNative("Shop_RegisterCategory", ItemManager_RegisterCategory);
 	CreateNative("Shop_StartItem", ItemManager_StartItem);
 	CreateNative("Shop_SetInfo", ItemManager_SetInfo);
@@ -48,23 +48,31 @@ void ItemManager_CreateNatives()
 	CreateNative("Shop_EndItem", ItemManager_EndItem);
 
 	CreateNative("Shop_UnregisterItem", ItemManager_UnregisterItem);
-	
+
 	CreateNative("Shop_GetItemCustomInfo", ItemManager_GetItemCustomInfo);
 	CreateNative("Shop_SetItemCustomInfo", ItemManager_SetItemCustomInfo);
-	
+
 	CreateNative("Shop_GetItemCustomInfoFloat", ItemManager_GetItemCustomInfoFloat);
 	CreateNative("Shop_SetItemCustomInfoFloat", ItemManager_SetItemCustomInfoFloat);
-	
+
 	CreateNative("Shop_GetItemCustomInfoString", ItemManager_GetItemCustomInfoString);
 	CreateNative("Shop_SetItemCustomInfoString", ItemManager_SetItemCustomInfoString);
 	CreateNative("Shop_KvCopySubKeysItemCustomInfo", ItemManager_KvCopySubKeysItemCustomInfo);
-	
+
 	CreateNative("Shop_GetItemPrice", ItemManager_GetItemPrice);
 	CreateNative("Shop_SetItemPrice", ItemManager_SetItemPrice);
-	
+
 	CreateNative("Shop_GetItemSellPrice", ItemManager_GetItemSellPrice);
 	CreateNative("Shop_SetItemSellPrice", ItemManager_SetItemSellPrice);
-	
+
+#if defined SHOP_CORE_PREMIUM
+	CreateNative("Shop_GetItemGoldPrice", ItemManager_GetItemGoldPrice);
+	CreateNative("Shop_SetItemGoldPrice", ItemManager_SetItemGoldPrice);
+
+	CreateNative("Shop_GetItemGoldSellPrice", ItemManager_GetItemGoldSellPrice);
+	CreateNative("Shop_SetItemGoldSellPrice", ItemManager_SetItemGoldSellPrice);
+#endif
+
 	CreateNative("Shop_GetItemValue", ItemManager_GetItemValue);
 	CreateNative("Shop_SetItemValue", ItemManager_SetItemValue);
 
@@ -81,15 +89,15 @@ void ItemManager_CreateNatives()
 	CreateNative("Shop_GetItemType", ItemManager_GetItemTypeNative);
 
 	CreateNative("Shop_GetItemCategoryId", ItemManager_GetItemCategoryIdNative);
-	
+
 	CreateNative("Shop_IsItemExists", ItemManager_IsItemExistsNative);
-	
+
 	CreateNative("Shop_IsValidCategory", ItemManager_IsValidCategoryNative);
-	
+
 	CreateNative("Shop_GetCategoryId", ItemManager_GetCategoryIdNative);
 	CreateNative("Shop_GetCategoryById", ItemManager_GetCategoryByIdNative);
 	CreateNative("Shop_GetCategoryNameById", ItemManager_GetCategoryNameByIdNative);
-	
+
 	CreateNative("Shop_FillArrayByItems", ItemManager_FillArrayByItemsNative);
 	CreateNative("Shop_FormatItem", ItemManager_FormatItemNative);
 }
@@ -119,42 +127,42 @@ void ItemManager_UnregisterMe(Handle plugin = null, bool plugin_end = false)
 	do
 	{
 		if (plugin != null && view_as<Handle>(h_KvItems.GetNum("plugin", 0)) != plugin) continue;
-			
+
 		h_KvItems.GetSectionName(buffer, sizeof(buffer));
 		int item_id = StringToInt(buffer);
 		// LogToFileEx("addons/sourcemod/shop.log", "Removed module %d", item_id);
 		OnItemUnregistered(item_id);
-		
+
 		DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks", 0));
 		if (dpCallback != null)
 			delete dpCallback;
-		
+
 		/*h_KvItems.Rewind();
 		h_KvItems.DeleteKey( buffer);
 		if (!h_KvItems.GotoFirstSubKey())
 		{
 			break;
 		}*/
-		
-		
+
+
 		// I don't know why, but DeleteThis method skips one keyvalue
 		while (h_KvItems.DeleteThis() == 1)
 		{
 			if (plugin != null && view_as<Handle>(h_KvItems.GetNum("plugin", 0)) != plugin) break;
-			
+
 			h_KvItems.GetSectionName(buffer, sizeof(buffer));
 			item_id = StringToInt(buffer);
 			// LogToFileEx("addons/sourcemod/shop.log", "Removed module %d", item_id);
 			OnItemUnregistered(item_id);
-			
+
 			dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks", 0));
 			if (dpCallback != null)
 				delete dpCallback;
 		}
 	} while (h_KvItems.GotoNextKey());
 	h_KvItems.Rewind();
-	
-	if (!plugin_end)																				 
+
+	if (!plugin_end)
 	{
 		StringMap trie;
 		ArrayList array;
@@ -162,7 +170,7 @@ void ItemManager_UnregisterMe(Handle plugin = null, bool plugin_end = false)
 		{
 			h_arCategories.GetString(category_id, buffer, sizeof(buffer));
 			if (!h_trieCategories.GetValue(buffer, trie)) continue;
-			
+
 			trie.GetValue("plugin_array", array);
 			// LogToFileEx("addons/sourcemod/shop.log", "Category name: %s", buffer);
 			int index = array.FindValue(plugin);
@@ -176,7 +184,7 @@ void ItemManager_UnregisterMe(Handle plugin = null, bool plugin_end = false)
 						dp = array.Get(j);
 						delete dp;
 					}
-					
+
 					delete array;
 					delete trie;
 					h_trieCategories.Remove(buffer);
@@ -185,21 +193,21 @@ void ItemManager_UnregisterMe(Handle plugin = null, bool plugin_end = false)
 			}
 			// Remove plugin handle
 			array.Erase(index);
-			
+
 			// Delete datapack in category
 			DataPack dp = view_as<DataPack>(array.Get(index));
 			delete dp;
 			array.Erase(index); // to remove datapack
-			
+
 			char cName[24];
 			GetPluginFilename(plugin, cName, sizeof(cName));
 			// LogToFileEx("addons/sourcemod/shop.log", "[%s] Deleted %s", cName, buffer);
-			
+
 			if (!array.Length)
 			{
 				delete array;
 				delete trie;
-				
+
 				h_trieCategories.Remove(buffer);
 			}
 		}
@@ -211,7 +219,7 @@ public int ItemManager_RegisterCategory(Handle plugin, int numParams)
 	char category[SHOP_MAX_STRING_LENGTH];
 	StringMap trie;
 	ArrayList array;
-	
+
 	GetNativeString(1, category, sizeof(category));
 	TrimString(category);
 	if (!category[0])
@@ -220,17 +228,17 @@ public int ItemManager_RegisterCategory(Handle plugin, int numParams)
 	}
 
 	int index = h_arCategories.FindString(category);
-	
+
 	if (index == -1)
 	{
 		index = h_arCategories.PushString(category);
 		Forward_OnCategoryRegistered(index, category);
 	}
-	
+
 	if (h_trieCategories.GetValue(category, trie))
 	{
 		trie.GetValue("plugin_array", array);
-		
+
 		if (array.FindValue(plugin) != -1)
 			return index;
 	}
@@ -238,29 +246,37 @@ public int ItemManager_RegisterCategory(Handle plugin, int numParams)
 	{
 		trie = new StringMap();
 		h_trieCategories.SetValue(category, trie);
-		
+
 		array = new ArrayList(1);
-		
+
 		char buffer[128];
 		GetNativeString(2, buffer, sizeof(buffer));
-		
+
 		trie.SetValue("plugin_array", array);
-		
+
 		trie.SetString("name", buffer);
 		GetNativeString(3, buffer, sizeof(buffer));
-		
+
 		trie.SetString("description", buffer);
+
+#if defined SHOP_CORE_PREMIUM_EXPERIMENTAL
+		buffer[0] = '\0';
+		if (numParams > 7)
+			GetNativeString(8, buffer, sizeof(buffer));
+
+		trie.SetString("parent_category", buffer);
+#endif
 	}
-	
+
 	DataPack dp = new DataPack();
-	
+
 	dp.WriteCell(plugin); // Handle of plugin that created category
 	dp.WriteFunction(GetNativeFunction(4)); // Category display
 	dp.WriteFunction(GetNativeFunction(5)); // Category description
 	dp.WriteFunction(GetNativeFunction(6)); // Category should display
 	dp.WriteFunction(GetNativeFunction(7)); // Category select
 	dp.WriteCell(0); // Count of items in category
-	
+
 	array.Push(plugin);
 	array.Push(dp);
 
@@ -271,22 +287,24 @@ bool ItemManager_OnCategorySelect(int client, int category_id, ShopMenu menu)
 {
 	char category[SHOP_MAX_STRING_LENGTH];
 	h_arCategories.GetString(category_id, category, sizeof(category));
-	
+
 	StringMap trie;
 	ArrayList array;
-	
-	h_trieCategories.GetValue(category, trie);
+
+	if (!h_trieCategories.GetValue(category, trie))
+		return false;
+
 	trie.GetValue("plugin_array", array);
-	
+
 	bool result = true;
 	DataPack tmp = array.Get(1);// because on index 0 there are plugin handle
 	if (tmp != null)
 	{
 		tmp.Reset(); // Deleting of Datapack in Shop_UnregisterMe()...
-		
+
 		Handle plugin = tmp.ReadCell();
 		tmp.Position = CATEGORY_DATAPACKPOS_SELECT;
-		
+
 		Function func_Select = tmp.ReadFunction();
 		if (IsCallValid(plugin, func_Select))
 		{
@@ -296,12 +314,12 @@ bool ItemManager_OnCategorySelect(int client, int category_id, ShopMenu menu)
 			Call_PushString(category);
 			Call_PushCell(menu);
 			Call_Finish(result);
-			
+
 			if (!result)
 				return false;
 		}
 	}
-	
+
 	return true;
 }
 
@@ -314,59 +332,59 @@ char plugin_item[SHOP_MAX_STRING_LENGTH];
 public int ItemManager_StartItem(Handle plugin, int numParams)
 {
 	int category_id = GetNativeCell(1);
-	
+
 	if (!ItemManager_IsValidCategory(category_id))
 		ThrowNativeError(SP_ERROR_NATIVE, "Category id %d is invalid", category_id);
-	
+
 	char item[SHOP_MAX_STRING_LENGTH];
 	GetNativeString(2, item, sizeof(item));
 	TrimString(item);
 	if (!item[0])
 		ThrowNativeError(SP_ERROR_NATIVE, "No item specified!");
-	
+
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	StringMap trie;
 	ArrayList array;
-	
+
 	h_arCategories.GetString(category_id, buffer, sizeof(buffer));
-	
+
 	h_trieCategories.GetValue(buffer, trie);
 	trie.GetValue("plugin_array", array);
-	
+
 	if (array.FindValue(plugin) == -1)
 		ThrowNativeError(SP_ERROR_NATIVE, "This plugin didn't register the category id %d", category_id);
-	
+
 	h_KvItems.Rewind();
 	if (h_KvItems.GotoFirstSubKey())
 	{
 		do
 		{
 			if (h_KvItems.GetNum("category_id", -1) != category_id) continue;
-			
+
 			h_KvItems.GetString("item", buffer, sizeof(buffer));
-			
+
 			if (StrEqual(buffer, item, false))
 			{
 				h_KvItems.Rewind();
-				
+
 				ThrowNativeError(SP_ERROR_NATIVE, "Item %s is already registered in the category id %d", item, category_id);
 			}
 		}
 		while (h_KvItems.GotoNextKey());
-		
+
 		h_KvItems.Rewind();
 	}
-	
+
 	plugin_category_id = category_id;
 	h_arCategories.GetString(category_id, plugin_category, sizeof(plugin_category));
 	strcopy(plugin_item, sizeof(plugin_item), item);
-	
+
 	plugin_kv = new KeyValues("ItemRegister");
 	plugin_kv.SetNum("plugin", view_as<int>(plugin));
 	plugin_kv.SetNum("category_id", category_id);
 	plugin_kv.SetString("item", item);
 	plugin_array = array;
-	
+
 	return true;
 }
 
@@ -374,35 +392,55 @@ public int ItemManager_SetInfo(Handle plugin, int numParams)
 {
 	if (plugin_kv == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "No item is being registered");
-	
+
 	char buffer[128];
-	
+
 	GetNativeString(1, buffer, sizeof(buffer));
 	plugin_kv.SetString("name", buffer);
-	
+
 	GetNativeString(2, buffer, sizeof(buffer));
 	plugin_kv.SetString("description", buffer);
-	
+
 	int price = GetNativeCell(3);
 	int sell_price = GetNativeCell(4);
-	
+
+#if defined SHOP_CORE_PREMIUM
+	if (price < -1) price = -1;
+#else
 	if (price < 0) price = 0;
-	
+#endif
+
 	if (sell_price < -1) sell_price = -1;
 	else if (sell_price > price) sell_price = price;
-	
+
 	ItemType type = GetNativeCell(5);
-	
+
 	plugin_kv.SetNum("price", price);
 	plugin_kv.SetNum("type", view_as<int>(type));
-	
+
 	int value = GetNativeCell(6);
-	
+
+#if defined SHOP_CORE_PREMIUM
+	int gold_price = GetNativeCell(7);
+	int gold_sell_price = GetNativeCell(8);
+
+	if (gold_price < -1) gold_price = -1;
+
+	if (gold_sell_price < -1) gold_sell_price = -1;
+	else if (gold_sell_price > gold_price) gold_sell_price = gold_price;
+
+	plugin_kv.SetNum("gold_price", gold_price);
+#endif
+
 	if (type == Item_Finite || type == Item_BuyOnly)
 	{
 		if (value < 1) value = 1;
 		plugin_kv.SetNum("sell_price", sell_price);
 		plugin_kv.SetNum("count", value);
+
+#if defined SHOP_CORE_PREMIUM
+		plugin_kv.SetNum("gold_sell_price", gold_sell_price);
+#endif
 	}
 	else
 	{
@@ -410,8 +448,12 @@ public int ItemManager_SetInfo(Handle plugin, int numParams)
 		plugin_kv.SetNum("sell_price", sell_price);
 		plugin_kv.SetNum("duration", value);
 		plugin_kv.SetNum("count", 1);
+
+#if defined SHOP_CORE_PREMIUM
+		plugin_kv.SetNum("gold_sell_price", gold_sell_price);
+#endif
 	}
-	
+
 	plugin_kv.SetNum("hide", 0);
 }
 
@@ -421,7 +463,7 @@ public int ItemManager_SetLuckChance(Handle plugin, int numParams)
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "No item is being registered");
 	}
-	
+
 	int iLuckChance = GetNativeCell(1);
 	if (iLuckChance < 0)
 	{
@@ -438,10 +480,10 @@ public int ItemManager_SetCustomInfo(Handle plugin, int numParams)
 {
 	if (plugin_kv == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "No item is being registered");
-	
+
 	char info[SHOP_MAX_STRING_LENGTH];
 	GetNativeString(1, info, sizeof(info));
-	
+
 	plugin_kv.JumpToKey("CustomInfo", true);
 	plugin_kv.SetNum(info, GetNativeCell(2));
 	plugin_kv.GoBack();
@@ -451,10 +493,10 @@ public int ItemManager_SetCustomInfoFloat(Handle plugin, int numParams)
 {
 	if (plugin_kv == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "No item is being registered");
-	
+
 	char info[SHOP_MAX_STRING_LENGTH];
 	GetNativeString(1, info, sizeof(info));
-	
+
 	plugin_kv.JumpToKey("CustomInfo", true);
 	plugin_kv.SetFloat(info, GetNativeCell(2));
 	plugin_kv.GoBack();
@@ -464,11 +506,11 @@ public int ItemManager_SetCustomInfoString(Handle plugin, int numParams)
 {
 	if (plugin_kv == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "No item is being registered");
-	
+
 	char info[SHOP_MAX_STRING_LENGTH], value[256];
 	GetNativeString(1, info, sizeof(info));
 	GetNativeString(2, value, sizeof(value));
-	
+
 	plugin_kv.JumpToKey("CustomInfo", true);
 	plugin_kv.SetString(info, value);
 	plugin_kv.GoBack();
@@ -478,10 +520,10 @@ public int ItemManager_KvCopySubKeysCustomInfo(Handle plugin, int numParams)
 {
 	if (plugin_kv == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "No item is being registered");
-	
+
 	KeyValues kv = GetNativeCell(1);
 	kv.GetNum("___SD__");
-	
+
 	plugin_kv.JumpToKey("CustomInfo", true);
 	KvCopySubkeys(kv, plugin_kv);
 	plugin_kv.GoBack();
@@ -502,9 +544,9 @@ public int ItemManager_SetCallbacks(Handle plugin, int numParams)
 	hPack.WriteFunction(GetNativeFunction(7));
 	hPack.WriteFunction(GetNativeFunction(8));
 	hPack.WriteFunction(GetNativeFunction(9));
-	if(numParams > 9)
+	if (numParams > 9)
 		hPack.WriteFunction(GetNativeFunction(10));
-	else 
+	else
 		hPack.WriteFunction(INVALID_FUNCTION);
 
 	plugin_kv.SetNum("callbacks", view_as<int>(hPack));
@@ -514,51 +556,51 @@ public int ItemManager_SetHide(Handle plugin, int numParams)
 {
 	if (plugin_kv == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "No item is being registered");
-	
+
 	plugin_kv.SetNum("hide", GetNativeCell(1));
 }
 
 public int ItemManager_EndItem(Handle plugin, int numParams)
 {
 	ItemType type = view_as<ItemType>(plugin_kv.GetNum("type", 0)); // by default ItemType_None
-	
+
 	DataPack dpCallback = view_as<DataPack>(plugin_kv.GetNum("callbacks", 0));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_USE;
 	Function func_use = dpCallback.ReadFunction();
 	if (type != Item_None && type != Item_BuyOnly && func_use == INVALID_FUNCTION)
 	{
 		delete plugin_kv;
-		
+
 		plugin_category_id = -1;
 		plugin_kv = null;
 		plugin_array = null;
 		plugin_category[0] = '\0';
 		plugin_item[0] = '\0';
-		
+
 		ThrowNativeError(SP_ERROR_NATIVE, "Using item type other than none, ItemUseToggle callback must to be set");
 	}
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_BUY;
 	Function func_buy = dpCallback.ReadFunction();
 	if (type == Item_BuyOnly && func_buy == INVALID_FUNCTION)
 	{
 		delete plugin_kv;
-		
+
 		plugin_category_id = -1;
 		plugin_kv = null;
 		plugin_array = null;
 		plugin_category[0] = '\0';
 		plugin_item[0] = '\0';
-		
+
 		ThrowNativeError(SP_ERROR_NATIVE, "Using item type BuyOnly, OnBuy callback must to be set");
 	}
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_REGISTER;
 	Function func_register = dpCallback.ReadFunction();
-	
+
 	DataPack dp = new DataPack();
 	dp.WriteCell(plugin_category_id);
 	dp.WriteCell(view_as<Handle>(plugin_kv.GetNum("plugin", 0)));
@@ -568,14 +610,14 @@ public int ItemManager_EndItem(Handle plugin, int numParams)
 	dp.WriteCell(plugin_kv);
 	dp.WriteCell(plugin_array);
 	dp.WriteCell(0);
-	
+
 	plugin_kv.Rewind();
-	
+
 	char s_Query[256];
 	h_db.Format(s_Query, sizeof(s_Query), "SELECT `id` FROM `%sitems` WHERE `category` = '%s' AND `item` = '%s' LIMIT 1;", g_sDbPrefix, plugin_category, plugin_item);
-	
+
 	TQuery(ItemManager_OnItemRegistered, s_Query, dp);
-	
+
 	plugin_category_id = -1;
 	plugin_kv = null;
 	plugin_array = null;
@@ -597,9 +639,9 @@ public int ItemManager_UnregisterItem(Handle plugin, int numParams)
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks", 0));
 	if(dpCallback != null)
 		delete dpCallback;
-	
+
 	OnItemUnregistered(item_id);
-	
+
 	h_KvItems.DeleteThis();
 	h_KvItems.Rewind();
 }
@@ -607,7 +649,7 @@ public int ItemManager_UnregisterItem(Handle plugin, int numParams)
 public int ItemManager_OnItemRegistered(Handle owner, Handle hndl, const char[] error, DataPack dp)
 {
 	char category[SHOP_MAX_STRING_LENGTH], item[SHOP_MAX_STRING_LENGTH];
-	
+
 	dp.Reset();
 	int category_id = dp.ReadCell();
 	Handle plugin = view_as<Handle>(dp.ReadCell());
@@ -617,18 +659,18 @@ public int ItemManager_OnItemRegistered(Handle owner, Handle hndl, const char[] 
 	KeyValues kv = view_as<KeyValues>(dp.ReadCell());
 	ArrayList array = view_as<ArrayList>(dp.ReadCell());
 	int iTry = dp.ReadCell();
-	
+
 	if (!iTry)
 	{
 		if (!IsPluginValid(plugin))
 		{
 			delete kv;
 			delete dp;
-			
+
 			return;
 		}
 	}
-	
+
 	if (error[0])
 	{
 		LogError("ItemManager_OnItemRegistered: %s", error);
@@ -638,7 +680,7 @@ public int ItemManager_OnItemRegistered(Handle owner, Handle hndl, const char[] 
 		delete dp;
 		return;
 	}
-	
+
 	int id;
 	switch (iTry)
 	{
@@ -648,7 +690,7 @@ public int ItemManager_OnItemRegistered(Handle owner, Handle hndl, const char[] 
 			{
 				char s_Query[256];
 				h_db.Format(s_Query, sizeof(s_Query), "INSERT INTO `%sitems` (`category`, `item`) VALUES ('%s', '%s');", g_sDbPrefix, category, item);
-				
+
 				dp.Reset(true);
 				dp.WriteCell(category_id);
 				dp.WriteCell(plugin);
@@ -658,12 +700,12 @@ public int ItemManager_OnItemRegistered(Handle owner, Handle hndl, const char[] 
 				dp.WriteCell(kv);
 				dp.WriteCell(array);
 				dp.WriteCell(1);
-				
+
 				TQuery(ItemManager_OnItemRegistered, s_Query, dp);
-				
+
 				return;
 			}
-			
+
 			id = SQL_FetchInt(hndl, 0);
 		}
 		case 1:
@@ -671,41 +713,41 @@ public int ItemManager_OnItemRegistered(Handle owner, Handle hndl, const char[] 
 			id = SQL_GetInsertId(hndl);
 		}
 	}
-	
+
 	delete dp;
-	
+
 	char buffer[16];
 	IntToString(id, buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	h_KvItems.JumpToKey(buffer, true);
 	KvCopySubkeys(kv, h_KvItems);
 	h_KvItems.Rewind();
-	
+
 	delete kv;
-	
+
 	int index = array.FindValue(plugin);
 	DataPack tmp = view_as<DataPack>(array.Get(index+1));
 	if (tmp != null)
 	{
 		tmp.Reset();
-		
+
 		DataPack new_tmp = new DataPack();
-		
+
 		new_tmp.WriteCell(tmp.ReadCell());
 		new_tmp.WriteFunction(tmp.ReadFunction());
 		new_tmp.WriteFunction(tmp.ReadFunction());
 		new_tmp.WriteFunction(tmp.ReadFunction());
 		new_tmp.WriteFunction(tmp.ReadFunction());
 		new_tmp.WriteCell(tmp.ReadCell() + 1);
-		
+
 		delete tmp;
-		
+
 		array.Set(index+1, new_tmp);
 	}
-	
+
 	OnItemRegistered(id);
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -742,24 +784,24 @@ public int ItemManager_SetItemCustomInfo(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	bool result = false;
-	
+
 	if (h_KvItems.JumpToKey("CustomInfo", true))
 	{
 		GetNativeString(2, buffer, sizeof(buffer));
 		h_KvItems.SetNum(buffer, GetNativeCell(3));
-		
+
 		result = true;
 	}
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -767,25 +809,25 @@ public int ItemManager_KvCopySubKeysItemCustomInfo(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
-	
+
 	bool result = false;
-	
+
 	KeyValues origin_kv = GetNativeCell(2);
 	origin_kv.GetNum("___SD__");
-	
+
 	if (h_KvItems.JumpToKey("CustomInfo", true))
 	{
 		KvCopySubkeys(origin_kv, h_KvItems);
-		
+
 		result = true;
 	}
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -793,21 +835,21 @@ public int ItemManager_GetItemCustomInfoFloat(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
-	
+
 	float result = GetNativeCell(3);
-	
+
 	if (h_KvItems.JumpToKey("CustomInfo"))
 	{
 		GetNativeString(2, buffer, sizeof(buffer));
 		result = h_KvItems.GetFloat(buffer, result);
 	}
-	
+
 	h_KvItems.Rewind();
-	
+
 	return view_as<int>(result);
 }
 
@@ -815,23 +857,23 @@ public int ItemManager_SetItemCustomInfoFloat(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
-	
+
 	bool result = false;
-	
+
 	if (h_KvItems.JumpToKey("CustomInfo", true))
 	{
 		GetNativeString(2, buffer, sizeof(buffer));
 		h_KvItems.SetFloat(buffer, GetNativeCell(3));
-		
+
 		result = true;
 	}
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -839,30 +881,30 @@ public int ItemManager_GetItemCustomInfoString(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	int bytes = 0;
-	
+
 	if (h_KvItems.JumpToKey("CustomInfo"))
 	{
 		GetNativeString(2, buffer, sizeof(buffer));
-		
+
 		int size = GetNativeCell(4);
-		
+
 		char[] defvalue = new char[size];
 		GetNativeString(5, defvalue, size);
 		h_KvItems.GetString(buffer, defvalue, size, defvalue);
-		
+
 		SetNativeString(3, defvalue, size, true, bytes);
 	}
-	
+
 	h_KvItems.Rewind();
-	
+
 	return bytes;
 }
 
@@ -870,28 +912,28 @@ public int ItemManager_SetItemCustomInfoString(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	bool result = false;
-	
+
 	if (h_KvItems.JumpToKey("CustomInfo", true))
 	{
 		GetNativeString(2, buffer, sizeof(buffer));
-		
+
 		char value[256];
 		GetNativeString(3, value, sizeof(value));
 		h_KvItems.SetString(buffer, value);
-		
+
 		result = true;
 	}
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -899,17 +941,17 @@ public int ItemManager_GetItemPrice(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	int result = h_KvItems.GetNum("price", 0);
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -917,23 +959,30 @@ public int ItemManager_SetItemPrice(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	int price = GetNativeCell(2);
+#if defined SHOP_CORE_PREMIUM
+	if (price < -1)
+	{
+		price = -1;
+	}
+#else
 	if (price < 0)
 	{
 		price = 0;
 	}
+#endif
 	if (h_KvItems.GetNum("sell_price", -1) > price)
 	{
 		h_KvItems.SetNum("sell_price", price);
 	}
-	
+
 	h_KvItems.SetNum("price", price);
 	h_KvItems.Rewind();
 }
@@ -942,17 +991,17 @@ public int ItemManager_GetItemSellPrice(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	int result = h_KvItems.GetNum("sell_price", -1);
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -960,13 +1009,13 @@ public int ItemManager_SetItemSellPrice(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	int price = h_KvItems.GetNum("price");
 	int sell_price = GetNativeCell(2);
 	if (sell_price > price)
@@ -978,25 +1027,114 @@ public int ItemManager_SetItemSellPrice(Handle plugin, int numParams)
 		sell_price = -1;
 	}
 	h_KvItems.SetNum("sell_price", sell_price);
-	
+
 	h_KvItems.Rewind();
 }
 
-public int ItemManager_GetItemValue(Handle plugin, int numParams)
+#if defined SHOP_CORE_PREMIUM
+public int ItemManager_GetItemGoldPrice(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
+	int result = h_KvItems.GetNum("gold_price", -1);
+
+	h_KvItems.Rewind();
+
+	return result;
+}
+
+public int ItemManager_SetItemGoldPrice(Handle plugin, int numParams)
+{
+	char buffer[SHOP_MAX_STRING_LENGTH];
+	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
+
+	h_KvItems.Rewind();
+	if (!h_KvItems.JumpToKey(buffer))
+	{
+		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
+	}
+
+	int gold_price = GetNativeCell(2);
+	if (gold_price < -1)
+	{
+		gold_price = -1;
+	}
+	if (h_KvItems.GetNum("gold_sell_price", -1) > gold_price)
+	{
+		h_KvItems.SetNum("gold_sell_price", gold_price);
+	}
+
+	h_KvItems.SetNum("gold_price", gold_price);
+	h_KvItems.Rewind();
+}
+
+public int ItemManager_GetItemGoldSellPrice(Handle plugin, int numParams)
+{
+	char buffer[SHOP_MAX_STRING_LENGTH];
+	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
+
+	h_KvItems.Rewind();
+	if (!h_KvItems.JumpToKey(buffer))
+	{
+		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
+	}
+
+	int result = h_KvItems.GetNum("gold_sell_price", -1);
+
+	h_KvItems.Rewind();
+
+	return result;
+}
+
+public int ItemManager_SetItemGoldSellPrice(Handle plugin, int numParams)
+{
+	char buffer[SHOP_MAX_STRING_LENGTH];
+	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
+
+	h_KvItems.Rewind();
+	if (!h_KvItems.JumpToKey(buffer))
+	{
+		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
+	}
+
+	int gold_price = h_KvItems.GetNum("gold_price");
+	int gold_sell_price = GetNativeCell(2);
+	if (gold_sell_price > gold_price)
+	{
+		gold_sell_price = gold_price;
+	}
+	else if (gold_sell_price < -1)
+	{
+		gold_sell_price = -1;
+	}
+	h_KvItems.SetNum("gold_sell_price", gold_sell_price);
+
+	h_KvItems.Rewind();
+}
+#endif
+
+public int ItemManager_GetItemValue(Handle plugin, int numParams)
+{
+	char buffer[SHOP_MAX_STRING_LENGTH];
+	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
+
+	h_KvItems.Rewind();
+	if (!h_KvItems.JumpToKey(buffer))
+	{
+		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
+	}
+
 	ItemType type = view_as<ItemType>(h_KvItems.GetNum("type", 1)); // by default ItemType_Finite
-	
+
 	int result = 0;
-	
+
 	if (type == Item_Finite || type == Item_BuyOnly)
 	{
 		result = h_KvItems.GetNum("count", 1);
@@ -1005,9 +1143,9 @@ public int ItemManager_GetItemValue(Handle plugin, int numParams)
 	{
 		result = h_KvItems.GetNum("duration", 0);
 	}
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -1015,17 +1153,17 @@ public int ItemManager_SetItemValue(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	ItemType type = view_as<ItemType>(h_KvItems.GetNum("type", 1)); // by default ItemType_Finite
-	
+
 	int value = GetNativeCell(2);
-	
+
 	switch (type)
 	{
 		case Item_Finite :
@@ -1034,7 +1172,7 @@ public int ItemManager_SetItemValue(Handle plugin, int numParams)
 			{
 				value = 1;
 			}
-			
+
 			h_KvItems.SetNum("count", value);
 		}
 		case Item_BuyOnly :
@@ -1046,11 +1184,11 @@ public int ItemManager_SetItemValue(Handle plugin, int numParams)
 			{
 				value = 0;
 			}
-			
+
 			h_KvItems.SetNum("duration", value);
 		}
 	}
-	
+
 	h_KvItems.Rewind();
 }
 
@@ -1063,13 +1201,13 @@ public int ItemManager_SetItemLuckChance(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
 	}
-	
+
 	int iLuckChance = GetNativeCell(2);
 	if (iLuckChance < 0)
 	{
@@ -1079,7 +1217,7 @@ public int ItemManager_SetItemLuckChance(Handle plugin, int numParams)
 	{
 		iLuckChance = 100;
 	}
-	
+
 	h_KvItems.SetNum("luck_chance", iLuckChance);
 	h_KvItems.Rewind();
 }
@@ -1087,35 +1225,35 @@ public int ItemManager_SetItemLuckChance(Handle plugin, int numParams)
 public int ItemManager_GetItemId(Handle plugin, int numParams)
 {
 	char item[SHOP_MAX_STRING_LENGTH], buffer[SHOP_MAX_STRING_LENGTH];
-	
+
 	int category_id = GetNativeCell(1);
 	GetNativeString(2, item, sizeof(item));
-	
+
 	int item_id = view_as<int>(INVALID_ITEM);
-	
+
 	h_KvItems.Rewind();
 	if (h_KvItems.GotoFirstSubKey())
 	{
 		do
 		{
 			if (h_KvItems.GetNum("category_id", -1) != category_id) continue;
-			
+
 			h_KvItems.GetString("item", buffer, sizeof(buffer));
-			
+
 			if (StrEqual(buffer, item, false))
 			{
 				h_KvItems.GetSectionName(buffer, sizeof(buffer));
-				
+
 				item_id = StringToInt(buffer);
-				
+
 				break;
 			}
 		}
 		while (h_KvItems.GotoNextKey());
-		
+
 		h_KvItems.Rewind();
 	}
-	
+
 	return item_id;
 }
 
@@ -1123,21 +1261,21 @@ public int ItemManager_GetItemById(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
-	
+
 	int bytes = 0;
-	
+
 	int size = GetNativeCell(3);
 	char[] item = new char[size];
-	
+
 	h_KvItems.GetString("item", item, size);
 	SetNativeString(2, item, size, true, bytes);
-	
+
 	h_KvItems.Rewind();
-	
+
 	return bytes;
 }
 
@@ -1150,21 +1288,21 @@ public int ItemManager_GetItemNameById(Handle plugin, int numParams)
 {
 	char buffer[SHOP_MAX_STRING_LENGTH];
 	IntToString(GetNativeCell(1), buffer, sizeof(buffer));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(buffer))
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", buffer);
-	
+
 	int bytes = 0;
-	
+
 	int size = GetNativeCell(3);
 	char[] item = new char[size];
-	
+
 	h_KvItems.GetString("name", item, size);
 	SetNativeString(2, item, size, true, bytes);
-	
+
 	h_KvItems.Rewind();
-	
+
 	return bytes;
 }
 
@@ -1184,7 +1322,7 @@ bool ItemManager_GetItemHideEx(const char[] sItemId)
 {
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId)) return false;
-	
+
 	bool bResult = view_as<bool>(h_KvItems.GetNum("hide", 0));
 	h_KvItems.Rewind();
 	return bResult;
@@ -1200,7 +1338,7 @@ public int ItemManager_SetItemHide(Handle plugin, int numParams)
 		ThrowNativeError(SP_ERROR_NATIVE, "Item id %s is invalid", sItemId);
 
 	h_KvItems.SetNum("hide", GetNativeCell(2));
-	
+
 	h_KvItems.Rewind();
 }
 
@@ -1223,25 +1361,25 @@ public int ItemManager_GetCategoryIdNative(Handle plugin, int numParams)
 {
 	char category[SHOP_MAX_STRING_LENGTH];
 	GetNativeString(1, category, sizeof(category));
-	
+
 	return ItemManager_GetCategoryId(category);
 }
 
 public int ItemManager_GetCategoryByIdNative(Handle plugin, int numParams)
 {
 	int category_id = GetNativeCell(1);
-	
+
 	char category[SHOP_MAX_STRING_LENGTH];
 	bool result = ItemManager_GetCategoryById(category_id, category, sizeof(category));
 	SetNativeString(2, category, GetNativeCell(3));
-	
+
 	return result;
 }
 
 public int ItemManager_GetCategoryNameByIdNative(Handle plugin, int numParams)
 {
 	int category_id = GetNativeCell(1);
-	
+
 	char category[SHOP_MAX_STRING_LENGTH];
 	if(ItemManager_GetCategoryById(category_id, category, sizeof(category)))
 	{
@@ -1254,7 +1392,7 @@ public int ItemManager_GetCategoryNameByIdNative(Handle plugin, int numParams)
 			return true;
 		}
 	}
-	
+
 	return false;
 }
 
@@ -1263,7 +1401,7 @@ public int ItemManager_FillArrayByItemsNative(Handle plugin, int numParams)
 	ArrayList h_Array = GetNativeCell(1);
 	if (h_Array == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Handle is invalid!");
-	
+
 	ClearArray(h_Array);
 	return ItemManager_FillArrayByItems(h_Array);
 }
@@ -1271,68 +1409,72 @@ public int ItemManager_FillArrayByItemsNative(Handle plugin, int numParams)
 public int ItemManager_FormatItemNative(Handle plugin, int numParams)
 {
 	int client = GetNativeCell(1);
-	
+
 	char error[64];
 	if (!CheckClient(client, error, sizeof(error)))
 	{
 		ThrowNativeError(SP_ERROR_NATIVE, error);
 	}
-	
+
 	int item_id = GetNativeCell(2);
-	
+
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	ShopMenu menu = GetNativeCell(3);
 	if (menu == Menu_Inventory && !ClientHasItemEx(client, sItemId))
 	{
 		return false;
 	}
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 	{
 		return false;
 	}
-	
+
 	int category_id = h_KvItems.GetNum("category_id");
-	
+
 	char display[SHOP_MAX_STRING_LENGTH], category[SHOP_MAX_STRING_LENGTH], item[SHOP_MAX_STRING_LENGTH];
 	h_arCategories.GetString(category_id, category, sizeof(category));
-	
+
 	Handle h_plugin = view_as<Handle>(h_KvItems.GetNum("plugin"));
-	
+
 	h_KvItems.GetString("name", display, sizeof(display));
-	
+
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks"));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Can't format, callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_DISPLAY;
 	Function callback_display = dpCallback.ReadFunction();
-	
+
 	h_KvItems.Rewind();
-	
+
 	ItemManager_OnItemDisplay(h_plugin, callback_display, client, category_id, category, item_id, item, (menu == Menu_Inventory) ? Menu_Inventory : Menu_Buy, _, display, display, sizeof(display));
-	
+
 	SetNativeString(4, display, GetNativeCell(5));
-	
+
 	return true;
 }
 
+#if defined SHOP_CORE_PREMIUM_EXPERIMENTAL
+bool ItemManager_FillCategories(Menu menu, int source_client, bool inventory = false, bool showAll = false, bool subCategory = false, const char[] parent_category = "", int &categories = 0)
+#else
 bool ItemManager_FillCategories(Menu menu, int source_client, bool inventory = false, bool showAll = false)
+#endif
 {
 	char category[SHOP_MAX_STRING_LENGTH], display[128], buffer[SHOP_MAX_STRING_LENGTH], description[SHOP_MAX_STRING_LENGTH];
 	StringMap trie;
 	ArrayList array, hCategoriesArray;
 	char sCatId[16];
 	int iSize, x, i, index;
-	ShopMenu shop_menu = (showAll ? Menu_Inventory : Menu_Buy);
-	
+	ShopMenu shop_menu = (inventory ? Menu_Inventory : Menu_Buy);
+
 	bool result = false;
-	
+
 	hCategoriesArray = h_arCategories.Clone();
-	
+
 	if(g_hSortArray != null)
 	{
 		iSize = g_hSortArray.Length;
@@ -1372,26 +1514,38 @@ bool ItemManager_FillCategories(Menu menu, int source_client, bool inventory = f
 			x = 0;
 		}
 
+#if defined SHOP_CORE_PREMIUM_EXPERIMENTAL
+		if (subCategory)
+		{
+			trie.GetString("parent_category", buffer, sizeof(buffer));
+			if ((!parent_category[0] && buffer[0] && ItemManager_IsValidCategory(ItemManager_GetCategoryId(buffer))) ||
+					(parent_category[0] && !StrEqual(parent_category, buffer, false)))
+			{
+				continue;
+			}
+		}
+#endif
+
 		trie.GetValue("plugin_array", array);
 		bool should_display = true;
 		Handle on_display_hndl = null, on_desc_hndl = null;
 		Function on_display_func = INVALID_FUNCTION, on_desc_func = INVALID_FUNCTION;
-		
+
 		for (int j = 1; j < array.Length; j+=2)
 		{
 			DataPack dp = array.Get(j);
-			
+
 			if (dp != null)
 			{
 				dp.Reset();
-				
+
 				Handle cat_plugin = dp.ReadCell(); // Handle of plugin that created category
 				Function func_display = dp.ReadFunction(); // Category display
 				Function func_desc = dp.ReadFunction(); // Category description
 				Function func_should = dp.ReadFunction(); // Category should display
 				dp.Position = CATEGORY_DATAPACKPOS_ITEMSCOUNT; // to skip Category select
 				int icat_size = dp.ReadCell(); // Real count of items in category
-				
+
 				if (!showAll)
 				{
 					/* Temporary modification */
@@ -1405,10 +1559,10 @@ bool ItemManager_FillCategories(Menu menu, int source_client, bool inventory = f
 						if (!ItemManager_GetItemHideEx(cItemid))
 							icat_size++;
 					}
-					
+
 					delete items;
 				}
-			
+
 				if (IsCallValid(cat_plugin, func_should))
 				{
 					Call_StartFunction(cat_plugin, func_should);
@@ -1432,7 +1586,7 @@ bool ItemManager_FillCategories(Menu menu, int source_client, bool inventory = f
 					on_desc_hndl = cat_plugin;
 					on_desc_func = func_desc;
 				}
-				
+
 				if (!inventory)
 				{
 					x += icat_size;
@@ -1444,69 +1598,110 @@ bool ItemManager_FillCategories(Menu menu, int source_client, bool inventory = f
 		{
 			continue;
 		}
-		
+
 		trie.GetString("name", buffer, sizeof(buffer));
 		ItemManager_OnCategoryDisplay(on_display_hndl, on_display_func, source_client, index, category, buffer, display, sizeof(display), shop_menu);
-		
+
 		description[0] = '\0';
 		trie.GetString("description", buffer, sizeof(buffer));
 		ItemManager_OnCategoryDescription(on_desc_hndl, on_desc_func, source_client, index, category, buffer, description, sizeof(description), shop_menu);
-		
-		if (showAll || g_hHideCategoriesItemsCount.BoolValue)
+
+		if (showAll || !g_hHideCategoriesItemsCount.BoolValue)
 		{
 			Format(display, sizeof(display), "%s (%i)", display, x);
 		}
-		
+
 		if (description[0])
 		{
 			Format(display, sizeof(display), "%s\n%s\n", display, description);
 		}
-		
+
 		IntToString(index, sCatId, sizeof(sCatId));
 		menu.AddItem(sCatId, display);
+#if defined SHOP_CORE_PREMIUM_EXPERIMENTAL
+		categories++;
+#endif
 		result = true;
 	}
-	
+
 	delete hCategoriesArray;
-	
+
 	return result;
 }
+
+#if defined SHOP_CORE_PREMIUM_EXPERIMENTAL
+bool ItemManager_FillSubCategories(Menu menu, int source_client, int category_id, bool inventory = false, bool showAll = false, int &categories)
+{
+	char category[SHOP_MAX_STRING_LENGTH];
+	h_arCategories.GetString(category_id, category, sizeof(category));
+	return ItemManager_FillCategories(menu, source_client, inventory, showAll, true, category, categories);
+}
+
+stock int ItemManager_GetParentCategoryIdById(int category_id)
+{
+	if (!ItemManager_IsValidCategory(category_id))
+	{
+		return -1;
+	}
+
+	StringMap trie;
+	char category[SHOP_MAX_STRING_LENGTH];
+
+	h_arCategories.GetString(category_id, category, sizeof(category));
+	if (!h_trieCategories.GetValue(category, trie))
+	{
+		return -1;
+	}
+
+	if (!trie.GetString("parent_category", category, sizeof(category)))
+	{
+		return -1;
+	}
+
+	if (!h_trieCategories.GetValue(category, trie))
+	{
+		return -1;
+	}
+
+	return ItemManager_GetCategoryId(category);
+}
+#endif
 
 bool ItemManager_GetCategoryDisplay(int category_id, int source_client, char[] buffer, int maxlength)
 {
 	StringMap trie;
 	ArrayList array;
 	char category[SHOP_MAX_STRING_LENGTH];
-	
+
 	h_arCategories.GetString(category_id, category, sizeof(category));
 	if (!h_trieCategories.GetValue(category, trie))
 	{
 		return false;
 	}
 	trie.GetValue("plugin_array", array);
-	
+
 	Handle on_display_hndl = null;
 	Function on_display_func = INVALID_FUNCTION;
 	DataPack dp = array.Get(1); // Because we need datapack to get
-	
+
 	if (dp != null)
 	{
 		// TODO make this easier via DataPack.Position
 		dp.Reset();
-		
+
 		Handle cat_plugin = dp.ReadCell(); // Handle of plugin that created category
 		Function func_display = dp.ReadFunction(); // Category display
-	
+
 		if (on_display_hndl == null)
 		{
 			on_display_hndl = cat_plugin;
 			on_display_func = func_display;
 		}
 	}
-	
+
 	trie.GetString("name", buffer, maxlength);
 	ItemManager_OnCategoryDisplay(on_display_hndl, on_display_func, source_client, category_id, category, buffer, buffer, maxlength, iClMenuId[source_client]);
-	
+
 	return true;
 }
 
@@ -1514,39 +1709,51 @@ bool ItemManager_GetItemDisplay(int item_id, int source_client, char[] buffer, i
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 	{
 		return false;
 	}
-	
+
 	int category_id = h_KvItems.GetNum("category_id");
 	Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin"));
-	
+
 	char category[SHOP_MAX_STRING_LENGTH], item[SHOP_MAX_STRING_LENGTH];
-	
+
 	h_arCategories.GetString(category_id, category, sizeof(category));
 	h_KvItems.GetString("item", item, sizeof(item));
 	h_KvItems.GetString("name", buffer, maxlength);
-	
+
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks"));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_DISPLAY;
 	Function callback_display = dpCallback.ReadFunction();
-	
+
 	h_KvItems.Rewind();
-	
+
 	ItemManager_OnItemDisplay(plugin, callback_display, source_client, category_id, category, item_id, item, Menu_Buy, _, buffer, buffer, maxlength);
-	
+
 	return true;
 }
 
+#if defined SHOP_CORE_PREMIUM_EXPERIMENTAL
+bool ItemManager_FillItemsOfCategory(Menu menu, int client, int source_client, int category_id, bool inventory = false, bool showAll = false, bool subCategory = false, int &categories = 0)
+#else
 bool ItemManager_FillItemsOfCategory(Menu menu, int client, int source_client, int category_id, bool inventory = false, bool showAll = false)
+#endif
 {
 	bool result = false;
+
+#if defined SHOP_CORE_PREMIUM_EXPERIMENTAL
+	if (subCategory)
+	{
+		result = ItemManager_FillSubCategories(menu, source_client, category_id, inventory, showAll, categories);
+	}
+#endif
+
 	h_KvItems.Rewind();
 	if (h_KvItems.GotoFirstSubKey())
 	{
@@ -1559,81 +1766,81 @@ bool ItemManager_FillItemsOfCategory(Menu menu, int client, int source_client, i
 			{
 				continue;
 			}
-			
+
 			if (!inventory && !showAll && isHidden) continue;
-			
+
 			h_KvItems.GetString("item", item, sizeof(item));
-			
+
 			int item_id = StringToInt(sItemId);
-			
+
 			Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin"));
-			
+
 			h_KvItems.GetString("name", display, sizeof(display));
-			
+
 			DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks", 0));
 			if (dpCallback == null)
 				ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-			
+
 			dpCallback.Position = ITEM_DATAPACKPOS_DISPLAY;
 			Function callback_display = dpCallback.ReadFunction();
-			
+
 			dpCallback.Position = ITEM_DATAPACKPOS_SHOULD_DISPLAY;
 			Function callback_should = dpCallback.ReadFunction();
-			
+
 			h_KvItems.Rewind();
-			
+
 			bool bShouldDisplay = ItemManager_OnItemShouldDisplay(plugin, callback_should, source_client, category_id, category, item_id, item, inventory ? Menu_Inventory : Menu_Buy);
-			
+
 			bool disabled = false;
 			if (!ItemManager_OnItemDisplay(plugin, callback_display, source_client, category_id, category, item_id, item, inventory ? Menu_Inventory : Menu_Buy, disabled, display, display, sizeof(display)))
 			{
 				disabled = false;
 			}
-			
+
 			h_KvItems.JumpToKey(sItemId);
-			
+
 			if (bShouldDisplay)
 				menu.AddItem(sItemId, display, disabled ? ITEMDRAW_DISABLED : ITEMDRAW_DEFAULT);
-			
+
 			result = true;
 		}
 		while (h_KvItems.GotoNextKey());
-		
+
 		h_KvItems.Rewind();
 	}
-	
+
 	return result;
 }
 
 Panel ItemManager_CreateItemPanelInfo(int source_client, int item_id, ShopMenu menu_act)
 {
 	Panel panel;
-	
+
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 	{
 		return panel;
 	}
-	
+
 	int category_id = h_KvItems.GetNum("category_id");
 	Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin"));
-	
+
 	char buffer[256], category[SHOP_MAX_STRING_LENGTH], item[SHOP_MAX_STRING_LENGTH];
-	
+
 	h_arCategories.GetString(category_id, category, sizeof(category));
 	h_KvItems.GetString("item", item, sizeof(item));
 	h_KvItems.GetString("name", buffer, sizeof(buffer));
-	
+
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks"));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_SELECT;
 	Function callback = dpCallback.ReadFunction();
-	
+
 	if(!ItemManager_OnItemSelect(plugin, callback, source_client, category_id, category, item_id, item, menu_act))
 	{
 		return panel;
@@ -1641,34 +1848,80 @@ Panel ItemManager_CreateItemPanelInfo(int source_client, int item_id, ShopMenu m
 
 	dpCallback.Position = ITEM_DATAPACKPOS_DISPLAY;
 	callback = dpCallback.ReadFunction();
-	
+
 	h_KvItems.Rewind();
-	
+
 	ItemManager_OnItemDisplay(plugin, callback, source_client, category_id, category, item_id, item, menu_act, _, buffer, buffer, sizeof(buffer));
-	
+
 	OnItemDisplay(source_client, menu_act, category_id, item_id, buffer, buffer, sizeof(buffer));
-	
+
 	h_KvItems.JumpToKey(sItemId);
-	
+
 	panel = new Panel();
 	panel.DrawText(buffer);
-	
+
 	SetGlobalTransTarget(source_client);
-	
+
 	int price = h_KvItems.GetNum("price");
 	int sell_price = h_KvItems.GetNum("sell_price");
-	
+#if defined SHOP_CORE_PREMIUM
+	int gold_price = h_KvItems.GetNum("gold_price");
+	int gold_sell_price = h_KvItems.GetNum("gold_sell_price");
+#endif
+
+#if defined SHOP_CORE_PREMIUM
+	int flags = ((view_as<int>(gold_price != -1) << 1) | view_as<int>(price != -1));
+	switch (flags)
+	{
+		case 0 : FormatEx(buffer, sizeof(buffer), "%t: %t", "Price", "Unbuyable");
+		case 1 :
+		{
+			if (price == 0)
+			{
+				FormatEx(buffer, sizeof(buffer), "%t: %t", "Price", "Free");
+			}
+			else
+			{
+				FormatEx(buffer, sizeof(buffer), "%t: %d", "Price", price);
+			}
+		}
+		case 2 : FormatEx(buffer, sizeof(buffer), "%t: %t|%t: %d", "Price", "Unbuyable", "Gold", gold_price);
+		case 3 :
+		{
+			if (price == 0)
+			{
+				FormatEx(buffer, sizeof(buffer), "%t: %t|%t: %d", "Price", "Free", "Gold", gold_price);
+			}
+			else
+			{
+				FormatEx(buffer, sizeof(buffer), "%t: %d|%t: %d", "Price", price, "Gold", gold_price);
+			}
+		}
+	}
+#else
 	if (price < 1)
 		FormatEx(buffer, sizeof(buffer), "%t: %t", "Price", "Free");
 	else
 		FormatEx(buffer, sizeof(buffer), "%t: %d", "Price", price);
+#endif
 	panel.DrawText(buffer);
+#if defined SHOP_CORE_PREMIUM
+	int sell_flags = ((view_as<int>(gold_sell_price != -1) << 1) | view_as<int>(sell_price != -1));
+	switch (sell_flags)
+	{
+		case 0 : FormatEx(buffer, sizeof(buffer), "%t: %t", "Sell Price", "Unsaleable");
+		case 1 : FormatEx(buffer, sizeof(buffer), "%t: %d", "Sell Price", sell_price);
+		case 2 : FormatEx(buffer, sizeof(buffer), "%t: %t|%t: %d", "Sell Price", "Unsaleable", "Gold", gold_sell_price);
+		case 3 : FormatEx(buffer, sizeof(buffer), "%t: %d|%t: %d", "Sell Price", sell_price, "Gold", gold_sell_price);
+	}
+#else
 	if (sell_price < 0)
 		FormatEx(buffer, sizeof(buffer), "%t: %t", "Sell Price", "Unsaleable");
 	else
 		FormatEx(buffer, sizeof(buffer), "%t: %d", "Sell Price", sell_price);
+#endif
 	panel.DrawText(buffer);
-	
+
 	switch (view_as<ItemType>(h_KvItems.GetNum("type", 0))) // by default it will be ItemType_None
 	{
 		case Item_Finite :
@@ -1689,26 +1942,26 @@ Panel ItemManager_CreateItemPanelInfo(int source_client, int item_id, ShopMenu m
 			panel.DrawText(buffer);
 		}
 	}
-	
+
 	h_KvItems.GetString("description", buffer, sizeof(buffer));
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_DESC;
 	callback = dpCallback.ReadFunction();
-	
+
 	h_KvItems.Rewind();
-	
+
 	ItemManager_OnItemDescription(plugin, callback, source_client, category_id, category, item_id, item, menu_act, buffer, buffer, sizeof(buffer));
 	OnItemDescription(source_client, menu_act, category_id, item_id, buffer, buffer, sizeof(buffer));
-	
+
 	TrimString(buffer);
 	if (buffer[0])
 	{
 		panel.DrawItem(" ", ITEMDRAW_SPACER|ITEMDRAW_RAWLINE);
 		panel.DrawText(buffer);
 	}
-	
+
 	panel.DrawItem(" ", ITEMDRAW_SPACER|ITEMDRAW_RAWLINE);
-	
+
 	return panel;
 }
 
@@ -1731,7 +1984,7 @@ stock bool ItemManager_IsItemExists(int item_id)
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	return ItemManager_IsItemExistsEx(sItemId);
 }
 
@@ -1748,7 +2001,7 @@ stock int ItemManager_GetItemDuration(int item_id)
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	return ItemManager_GetItemDurationEx(sItemId);
 }
 
@@ -1757,21 +2010,25 @@ int ItemManager_GetItemDurationEx(const char[] sItemId)
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return 0;
-	
+
 	int duration = h_KvItems.GetNum("duration", 0);
 	h_KvItems.Rewind();
-	
+
 	return duration;
 }
 
+#if defined SHOP_CORE_PREMIUM
+bool ItemManager_GetItemInfoEx(const char[] sItemId, char[] item, int maxlength, int &category_id, int &price, int &sell_price, int &count, int &duration, ItemType &type, int &gold_price, int &gold_sell_price)
+#else
 bool ItemManager_GetItemInfoEx(const char[] sItemId, char[] item, int maxlength, int &category_id, int &price, int &sell_price, int &count, int &duration, ItemType &type)
+#endif
 {
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 	{
 		return false;
 	}
-	
+
 	h_KvItems.GetString("item", item, maxlength);
 	category_id = h_KvItems.GetNum("category_id", -1);
 	price = h_KvItems.GetNum("price", 0);
@@ -1779,9 +2036,13 @@ bool ItemManager_GetItemInfoEx(const char[] sItemId, char[] item, int maxlength,
 	count = h_KvItems.GetNum("count", 1);
 	duration = h_KvItems.GetNum("duration", 0);
 	type = view_as<ItemType>(h_KvItems.GetNum("type", 0));
-	
+#if defined SHOP_CORE_PREMIUM
+	gold_price = h_KvItems.GetNum("gold_price", -1);
+	gold_sell_price = h_KvItems.GetNum("gold_sell_price", -1);
+#endif
+
 	h_KvItems.Rewind();
-	
+
 	return true;
 }
 
@@ -1789,7 +2050,7 @@ int ItemManager_GetLuckChance(int item_id)
 {
 	char sItemid[16];
 	IntToString(item_id, sItemid, sizeof(sItemid));
-	
+
 	return ItemManager_GetLuckChanceEx(sItemid);
 }
 
@@ -1800,11 +2061,11 @@ int ItemManager_GetLuckChanceEx(const char[] sItemId)
 	{
 		return 0;
 	}
-	
+
 	int result = h_KvItems.GetNum("luck_chance", 100);
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -1814,11 +2075,11 @@ int ItemManager_GetItemPriceEx(const char[] sItemId)
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return 0;
-	
+
 	int result = h_KvItems.GetNum("price", 0);
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -1827,19 +2088,34 @@ stock int ItemManager_GetItemSellPriceEx(const char[] sItemId)
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return -1;
-	
+
 	int result = h_KvItems.GetNum("sell_price", -1);
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
+
+#if defined SHOP_CORE_PREMIUM
+int ItemManager_GetItemGoldPriceEx(const char[] sItemId)
+{
+	h_KvItems.Rewind();
+	if (!h_KvItems.JumpToKey(sItemId))
+		return 0;
+
+	int result = h_KvItems.GetNum("gold_price", -1);
+
+	h_KvItems.Rewind();
+
+	return result;
+}
+#endif
 
 stock int ItemManager_GetItemCategoryId(int item_id)
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	return ItemManager_GetItemCategoryIdEx(sItemId);
 }
 
@@ -1859,7 +2135,7 @@ stock ItemType ItemManager_GetItemType(int item_id)
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	ItemType type = Item_None;
 	h_KvItems.Rewind();
 	if (h_KvItems.JumpToKey(sItemId))
@@ -1885,7 +2161,7 @@ stock ItemType ItemManager_GetItemTypeEx(const char[] sItemId)
 int ItemManager_FillArrayByItems(ArrayList array)
 {
 	int num = 0;
-	
+
 	h_KvItems.Rewind();
 	if (h_KvItems.GotoFirstSubKey())
 	{
@@ -1899,10 +2175,10 @@ int ItemManager_FillArrayByItems(ArrayList array)
 			}
 		}
 		while (h_KvItems.GotoNextKey());
-		
+
 		h_KvItems.Rewind();
 	}
-	
+
 	return num;
 }
 
@@ -1910,34 +2186,34 @@ void ItemManager_OnPlayerItemElapsed(int client, int item_id)
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return;
-	
+
 	Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin", 0));
 	if (plugin == null)
 		return;
-	 
+
 	DataPack dpCallback = dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks", 0));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_ELAPSE;
 	Function callback_elapse = dpCallback.ReadFunction();
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_USE;
 	Function callback_use = dpCallback.ReadFunction();
-	
+
 	int category_id = h_KvItems.GetNum("category_id", -1);
 	char category[SHOP_MAX_STRING_LENGTH], item[SHOP_MAX_STRING_LENGTH];
 	ItemManager_GetCategoryById(category_id, category, sizeof(category));
 	h_KvItems.GetString("item", item, sizeof(item));
-	
+
 	h_KvItems.Rewind();
-	
+
 	CallItemElapsedForward(client, category_id, category, item_id, item);
-	
+
 	if (IsCallValid(plugin, callback_elapse))
 	{
 		Call_StartFunction(plugin, callback_elapse);
@@ -1948,7 +2224,7 @@ void ItemManager_OnPlayerItemElapsed(int client, int item_id)
 		Call_PushString(item);
 		Call_Finish();
 	}
-	
+
 	if (IsCallValid(plugin, callback_use))
 	{
 		Call_StartFunction(plugin, callback_use);
@@ -1968,31 +2244,31 @@ stock void ItemManager_OnUseToggleCategory(int client, int category_id)
 	h_KvItems.Rewind();
 	if (!h_KvItems.GotoFirstSubKey())
 		return;
-	
+
 	char sItemId[16], category[SHOP_MAX_STRING_LENGTH], item[SHOP_MAX_STRING_LENGTH];
 	do
 	{
 		if (h_KvItems.GetNum("category_id", -1) != category_id || !h_KvItems.GetSectionName(sItemId, sizeof(sItemId)))
 			continue;
-		
+
 		ToggleItemCategoryOffEx(client, sItemId);
-		
+
 		Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin", 0));
-		
+
 		DataPack dpCallback = dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks", 0));
 		if (dpCallback == null)
 			ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-		
+
 		dpCallback.Position = ITEM_DATAPACKPOS_USE;
 		Function callback = dpCallback.ReadFunction();
-		
+
 		if (IsCallValid(plugin, callback))
 		{
 			ItemManager_GetCategoryById(category_id, category, sizeof(category));
 			h_KvItems.GetString("item", item, sizeof(item));
-			
+
 			h_KvItems.Rewind();
-		
+
 			Call_StartFunction(plugin, callback);
 			Call_PushCell(client);
 			Call_PushCell(category_id);
@@ -2002,12 +2278,12 @@ stock void ItemManager_OnUseToggleCategory(int client, int category_id)
 			Call_PushCell(true);
 			Call_PushCell(true);
 			Call_Finish();
-			
+
 			h_KvItems.JumpToKey(sItemId);
 		}
 	}
 	while (h_KvItems.GotoNextKey());
-	
+
 	h_KvItems.Rewind();
 }
 
@@ -2015,7 +2291,7 @@ stock ShopAction ItemManager_OnUseToggleItem(int client, int item_id, bool by_na
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	return ItemManager_OnUseToggleItemEx(client, sItemId, by_native, toggle, ignore);
 }
 
@@ -2024,38 +2300,38 @@ stock ShopAction ItemManager_OnUseToggleItemEx(int client, const char[] sItemId,
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return Shop_Raw;
-	
+
 	if (!ignore && view_as<ItemType>(h_KvItems.GetNum("type", 0)) != Item_Togglable) // by default ItemType_None
 	{
 		h_KvItems.Rewind();
 		return Shop_Raw;
 	}
-	
+
 	int item_id = StringToInt(sItemId);
-	
+
 	ShopAction action = Shop_Raw;
-	
+
 	char item[SHOP_MAX_STRING_LENGTH];
 	Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin", 0));
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks"));
-	
+
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_USE;
 	Function callback = dpCallback.ReadFunction();
-	
+
 	int category_id = h_KvItems.GetNum("category_id", -1);
-	
+
 	h_KvItems.GetString("item", item, sizeof(item));
-	
+
 	h_KvItems.Rewind();
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		char category[SHOP_MAX_STRING_LENGTH];
 		ItemManager_GetCategoryById(category_id, category, sizeof(category));
-		
+
 		Call_StartFunction(plugin, callback);
 		Call_PushCell(client);
 		Call_PushCell(category_id);
@@ -2087,7 +2363,7 @@ stock ShopAction ItemManager_OnUseToggleItemEx(int client, const char[] sItemId,
 		Call_PushCell(false);
 		Call_Finish(action);
 	}
-	
+
 	return action;
 }
 
@@ -2095,7 +2371,7 @@ void ItemManager_SetupPreview(int client, int item_id)
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	ItemManager_SetupPreviewEx(client, sItemId);
 }
 
@@ -2103,21 +2379,21 @@ bool ItemManager_CanPreview(int item_id)
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return false;
-	
+
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks", 0));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_COMMON;
-	
+
 	bool result = view_as<bool>(dpCallback.ReadFunction() != INVALID_FUNCTION);
-	
+
 	h_KvItems.Rewind();
-	
+
 	return result;
 }
 
@@ -2126,26 +2402,26 @@ void ItemManager_SetupPreviewEx(int client, const char[] sItemId)
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return;
-	
+
 	Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin", 0));
 
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks"));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_COMMON;
 	Function callback = dpCallback.ReadFunction();
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		int category_id = h_KvItems.GetNum("category_id", -1);
-		
+
 		char category[SHOP_MAX_STRING_LENGTH], item[SHOP_MAX_STRING_LENGTH];
 		ItemManager_GetCategoryById(category_id, category, sizeof(category));
 		h_KvItems.GetString("item", item, sizeof(item));
-		
+
 		h_KvItems.Rewind();
-		
+
 		Call_StartFunction(plugin, callback);
 		Call_PushCell(client);
 		Call_PushCell(category_id);
@@ -2154,35 +2430,39 @@ void ItemManager_SetupPreviewEx(int client, const char[] sItemId)
 		Call_PushString(item);
 		Call_Finish();
 	}
-	
+
 	h_KvItems.Rewind();
 }
 
+#if defined SHOP_CORE_PREMIUM
+bool ItemManager_OnItemBuyEx(int client, int category_id, const char[] category, int item_id, const char[] item, ItemType type, int price, int sell_price, int value, int gold_price, int gold_sell_price)
+#else
 bool ItemManager_OnItemBuyEx(int client, int category_id, const char[] category, int item_id, const char[] item, ItemType type, int price, int sell_price, int value)
+#endif
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return false;
-		
+
 	bool isHidden = view_as<bool>(h_KvItems.GetNum("hide", 0));
 	if (isHidden) return false; // make hidden items unbuyable
-	
+
 	Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin", 0));
-	
+
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks"));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_BUY;
 	Function callback = dpCallback.ReadFunction();
-	
+
 	h_KvItems.Rewind();
-	
+
 	bool result = true;
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -2195,34 +2475,42 @@ bool ItemManager_OnItemBuyEx(int client, int category_id, const char[] category,
 		Call_PushCell(price);
 		Call_PushCell(sell_price);
 		Call_PushCell(value);
+#if defined SHOP_CORE_PREMIUM
+		Call_PushCell(gold_price);
+		Call_PushCell(gold_sell_price);
+#endif
 		Call_Finish(result);
 	}
-	
+
 	return result;
 }
 
+#if defined SHOP_CORE_PREMIUM
+bool ItemManager_OnItemSellEx(int client, int category_id, const char[] category, int item_id, const char[] item, ItemType type, int sell_price, int gold_sell_price)
+#else
 bool ItemManager_OnItemSellEx(int client, int category_id, const char[] category, int item_id, const char[] item, ItemType type, int sell_price)
+#endif
 {
 	char sItemId[16];
 	IntToString(item_id, sItemId, sizeof(sItemId));
-	
+
 	h_KvItems.Rewind();
 	if (!h_KvItems.JumpToKey(sItemId))
 		return false;
-	
+
 	Handle plugin = view_as<Handle>(h_KvItems.GetNum("plugin", 0));
 
 	DataPack dpCallback = view_as<DataPack>(h_KvItems.GetNum("callbacks"));
 	if (dpCallback == null)
 		ThrowNativeError(SP_ERROR_NATIVE, "Callbacks for this item not found");
-	
+
 	dpCallback.Position = ITEM_DATAPACKPOS_SELL;
 	Function callback = dpCallback.ReadFunction();
-	
+
 	h_KvItems.Rewind();
-	
+
 	bool result = true;
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -2233,16 +2521,19 @@ bool ItemManager_OnItemSellEx(int client, int category_id, const char[] category
 		Call_PushString(item);
 		Call_PushCell(type);
 		Call_PushCell(sell_price);
+#if defined SHOP_CORE_PREMIUM
+		Call_PushCell(gold_sell_price);
+#endif
 		Call_Finish(result);
 	}
-	
+
 	return result;
 }
 
 bool ItemManager_OnItemShouldDisplay(Handle plugin, Function callback, int client, int category_id, const char[] category, int item_id, const char[] item, ShopMenu menu)
 {
 	bool result = true;
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -2254,14 +2545,14 @@ bool ItemManager_OnItemShouldDisplay(Handle plugin, Function callback, int clien
 		Call_PushCell(menu);
 		Call_Finish(result);
 	}
-	
+
 	return result;
 }
 
 bool ItemManager_OnItemDisplay(Handle plugin, Function callback, int client, int category_id, const char[] category, int item_id, const char[] item, ShopMenu menu, bool &disabled = false, const char[] name, char[] buffer, int maxlen)
 {
 	bool result = false;
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -2277,19 +2568,19 @@ bool ItemManager_OnItemDisplay(Handle plugin, Function callback, int client, int
 		Call_PushCell(maxlen);
 		Call_Finish(result);
 	}
-	
+
 	if (!result)
 	{
 		strcopy(buffer, maxlen, name);
 	}
-	
+
 	return result;
 }
 
 bool ItemManager_OnItemSelect(Handle plugin, Function callback, int client, int category_id, const char[] category, int item_id, const char[] item, ShopMenu menu)
 {
 	bool result = true;
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -2301,14 +2592,14 @@ bool ItemManager_OnItemSelect(Handle plugin, Function callback, int client, int 
 		Call_PushCell(menu);
 		Call_Finish(result);
 	}
-	
+
 	return result;
 }
 
 bool ItemManager_OnItemDescription(Handle plugin, Function callback, int client, int category_id, const char[] category, int item_id, const char[] item, ShopMenu menu, const char[] description, char[] buffer, int maxlen)
 {
 	bool result = false;
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -2323,19 +2614,19 @@ bool ItemManager_OnItemDescription(Handle plugin, Function callback, int client,
 		Call_PushCell(maxlen);
 		Call_Finish(result);
 	}
-	
+
 	if (!result)
 	{
 		strcopy(buffer, maxlen, description);
 	}
-	
+
 	return result;
 }
 
 bool ItemManager_OnCategoryDisplay(Handle plugin, Function callback, int client, int category_id, const char[] category, const char[] name, char[] category_buffer, int category_maxlen, ShopMenu menu)
 {
 	bool result = false;
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -2348,19 +2639,19 @@ bool ItemManager_OnCategoryDisplay(Handle plugin, Function callback, int client,
 		Call_PushCell(menu);
 		Call_Finish(result);
 	}
-	
+
 	if (!result)
 	{
 		strcopy(category_buffer, category_maxlen, name);
 	}
-	
+
 	return result;
 }
 
 bool ItemManager_OnCategoryDescription(Handle plugin, Function callback, int client, int category_id, const char[] category, const char[] desc, char[] desc_buffer, int desc_maxlen, ShopMenu menu)
 {
 	bool result = false;
-	
+
 	if (IsCallValid(plugin, callback))
 	{
 		Call_StartFunction(plugin, callback);
@@ -2373,12 +2664,12 @@ bool ItemManager_OnCategoryDescription(Handle plugin, Function callback, int cli
 		Call_PushCell(menu);
 		Call_Finish(result);
 	}
-	
+
 	if (!result)
 	{
 		strcopy(desc_buffer, desc_maxlen, desc);
 	}
-	
+
 	return result;
 }
 
@@ -2388,8 +2679,13 @@ bool ItemManager_IsValidCategory(int category_id)
 	{
 		return false;
 	}
-	
-	return true;
+
+	StringMap trie;
+	char category[SHOP_MAX_STRING_LENGTH];
+
+	h_arCategories.GetString(category_id, category, sizeof(category));
+
+	return h_trieCategories.GetValue(category, trie);
 }
 
 ArrayList ItemManager_GetItemIdArrayFromPlugin(Handle plugin)
@@ -2400,7 +2696,7 @@ ArrayList ItemManager_GetItemIdArrayFromPlugin(Handle plugin)
 		KeyValues kv = new KeyValues("kv");
 		h_KvItems.Rewind();
 		KvCopySubkeys(h_KvItems, kv);
-		
+
 		if (kv.GotoFirstSubKey())
 		{
 			char cSection[5];
@@ -2413,10 +2709,10 @@ ArrayList ItemManager_GetItemIdArrayFromPlugin(Handle plugin)
 				}
 			} while (kv.GotoNextKey());
 		}
-		
+
 		delete kv;
 		return array;
 	}
-	
+
 	return null;
 }

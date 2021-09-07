@@ -3,7 +3,7 @@ stock bool Helpers_IsPluginValid(Handle plugin)
 	/* Check if the plugin handle is pointing to a valid plugin. */
 	Handle hIterator = GetPluginIterator();
 	bool bIsValid = false;
-	
+
 	while (MorePlugins(hIterator))
 	{
 		if (plugin == ReadPlugin(hIterator))
@@ -12,7 +12,7 @@ stock bool Helpers_IsPluginValid(Handle plugin)
 			break;
 		}
 	}
-	
+
 	delete hIterator;
 	return bIsValid;
 }
@@ -34,9 +34,9 @@ stock bool Helpers_CheckClient(int client, char[] error, int length)
 		FormatEx(error, length, "Client index %i is a bot", client);
 		return false;
 	}
-	
+
 	error[0] = '\0';
-	
+
 	return true;
 }
 
@@ -52,7 +52,7 @@ stock void Helpers_GetTimeFromStamp(char[] buffer, int maxlength, int timestamp,
 		}
 		else
 		{
-			FormatEx(buffer, maxlength, "%d%T", years, "y.");
+			FormatEx(buffer, maxlength, "%d%T", years, "y.", source_client);
 		}
 		return;
 	}
@@ -75,7 +75,7 @@ stock void Helpers_GetTimeFromStamp(char[] buffer, int maxlength, int timestamp,
 		int Hours = (timestamp / 3600);
 		int Mins = (timestamp / 60) % 60;
 		int Secs = timestamp % 60;
-		
+
 		if (Hours > 0)
 		{
 			FormatEx(buffer, maxlength, "%02d:%02d:%02d", Hours, Mins, Secs);
@@ -90,7 +90,7 @@ stock void Helpers_GetTimeFromStamp(char[] buffer, int maxlength, int timestamp,
 stock bool Helpers_AddTargetsToMenu(Menu menu, int source_client, bool credits = false)
 {
 	bool result = false;
-	
+
 	char userid[9], buffer[MAX_NAME_LENGTH+21];
 	for (int i = 1; i <= MaxClients; i++)
 	{
@@ -99,31 +99,35 @@ stock bool Helpers_AddTargetsToMenu(Menu menu, int source_client, bool credits =
 			IntToString(GetClientUserId(i), userid, sizeof(userid));
 			if (credits)
 			{
+#if defined SHOP_CORE_PREMIUM
+				FormatEx(buffer, sizeof(buffer), "%N (%d|%d)", i, GetCredits(i), GetGold(i));
+#else
 				FormatEx(buffer, sizeof(buffer), "%N (%d)", i, GetCredits(i));
+#endif
 			}
 			else
 			{
 				GetClientName(i, buffer, sizeof(buffer));
 			}
-			
+
 			menu.AddItem(userid, buffer);
-			
+
 			result = true;
 		}
 	}
-	
+
 	return result;
 }
 
 stock int Helpers_GetRandomIntEx(int min, int max)
 {
 	int random = GetURandomInt();
-	
+
 	if (!random)
 		random++;
-		
+
 	int number = RoundToCeil(float(random) / (float(2147483647) / float(max - min + 1))) + min - 1;
-	
+
 	return number;
 }
 
@@ -141,7 +145,7 @@ stock int Helpers_Math_Abs(int value)
 }
 
 /**
- * 
+ *
  */
 void Helpers_CloseHandleWithChatReason(Handle hArray, int client, const char[] chatReason)
 {

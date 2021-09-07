@@ -48,14 +48,16 @@ forward void Shop_OnCategoryRegistered(CategoryId category_id, const char[] name
  *	@param cat_desc				Callback called on category's description being displayed
  *	@param cat_should			Callback called whether the category should be displayed to a player
  *	@param cat_select			Callback called when a player is trying to select the category
- *	
+ *	@param parent_category		Unique name of parent category, leave empty for "root" position
+ *	-
  *	@return Category id of the category
 */
-native CategoryId Shop_RegisterCategory(const char[] category, const char[] name, const char[] description, 
-								Shop_CategoryDisplayCallback cat_display=INVALID_FUNCTION, 
+native CategoryId Shop_RegisterCategory(const char[] category, const char[] name, const char[] description,
+								Shop_CategoryDisplayCallback cat_display=INVALID_FUNCTION,
 								Shop_CategoryDescriptionCallback cat_desc=INVALID_FUNCTION,
 								Shop_CategoryShouldDisplayCallback cat_should=INVALID_FUNCTION,
-								Shop_CategorySelectCallback cat_select=INVALID_FUNCTION);
+								Shop_CategorySelectCallback cat_select=INVALID_FUNCTION,
+								const char[] parent_category = "");
 
 /**
  *	Starts an item to register
